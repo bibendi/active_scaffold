@@ -167,9 +167,12 @@ module ActiveScaffold
         html_options[:method] = link.method if link.method != :get
 
         html_options['data-confirm'] = link.confirm(record.try(:to_label)) if link.confirm?
-        html_options['data-position'] = link.position if link.position and link.inline?
-        html_options[:class] += ' as_action' if link.inline?
-        html_options['data-action'] = link.action if link.inline?
+        if link.inline?
+          html_options['data-position'] = link.position if link.position
+          html_options[:class] += ' as_action'
+          html_options['data-action'] = link.action
+          html_options['data-type'] = 'html xml'
+        end
         if link.popup?
           html_options['data-popup'] = true
           html_options[:target] = '_blank'
