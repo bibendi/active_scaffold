@@ -171,7 +171,7 @@ module ActiveScaffold
           html_options['data-position'] = link.position if link.position
           html_options[:class] += ' as_action'
           html_options['data-action'] = link.action
-          html_options['data-type'] = 'html xml'
+          html_options['data-type'] = 'html'
         end
         if link.popup?
           html_options['data-popup'] = true

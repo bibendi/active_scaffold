@@ -36,7 +36,7 @@ module ActiveScaffold::Actions
     end
 
     def show_respond_to_html
-      render :action => 'show'
+      render :action => 'show', :layout => !request.xhr?
     end
     # A simple method to retrieve and prepare a record for showing.
     # May be overridden to customize show routine
