@@ -61,18 +61,23 @@ module ActiveScaffold
 });\n"        
         prepend_js_file(js_file, localization)        
       end
-      
+
+      # *Note* Change i18n items call, coz they could be a lambda
       def self.date_options
-        date_options = I18n.translate! 'date'
+        month_names      = I18n.translate! 'date.month_names'
+        abbr_month_names = I18n.translate! 'date.abbr_month_names'
+        day_names        = I18n.translate! 'date.day_names'
+        abbr_day_names   = I18n.translate! 'date.abbr_day_names'
+
         date_picker_options = { :closeText => as_(:close),
           :prevText => as_(:previous),
           :nextText => as_(:next),
           :currentText => as_(:today),
-          :monthNames => date_options[:month_names][1, (date_options[:month_names].length - 1)],
-          :monthNamesShort => date_options[:abbr_month_names][1, (date_options[:abbr_month_names].length - 1)],
-          :dayNames => date_options[:day_names],
-          :dayNamesShort => date_options[:abbr_day_names],
-          :dayNamesMin => date_options[:abbr_day_names],
+          :monthNames => month_names[1, (month_names.length - 1)],
+          :monthNamesShort => abbr_month_names[1, (abbr_month_names.length - 1)],
+          :dayNames => day_names,
+          :dayNamesShort => abbr_day_names,
+          :dayNamesMin => abbr_day_names,
           :changeYear => true,
           :changeMonth => true,
         }
@@ -84,7 +89,7 @@ module ActiveScaffold
           Rails.logger.warn "ActiveScaffold: Missing date picker localization for your locale: #{I18n.locale}"
         end
 
-        js_format = self.to_datepicker_format(date_options[:formats][:default])
+        js_format = self.to_datepicker_format(I18n.translate!('date.formats.default'))
         date_picker_options[:dateFormat] = js_format unless js_format.nil? 
         date_picker_options
       end
