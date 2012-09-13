@@ -42,7 +42,6 @@ module ActiveScaffold
             return text if link.crud_type.nil?
             url_options[:link] = as_(:create_new) if link.crud_type == :create
           end
-
           if column_link_authorized?(link, column, record, associated)
             render_action_link(link, url_options, record)
           else
@@ -315,11 +314,17 @@ module ActiveScaffold
       def mark_column_heading
         if active_scaffold_config.mark.mark_all_mode == :page then
           all_marked = true
-          @page.items.each do |record|
+          @records.each do |record|
             all_marked = false if !marked_records.entries.include?(record.id)
           end
         else
-          all_marked = (marked_records.length >= @page.pager.count)
+          # if relation does not respond to kaminari total_count...
+          # kaminari paging is nt active
+          if @records.respond_to?(:total_count)
+            all_marked = (marked_records.length >= @records.total_count)
+          else
+            all_marked = (marked_records.length >= @records.count)
+          end
         end
         tag_options = {:id => "#{controller_id}_mark_heading", :class => "mark_heading in_place_editor_field"}
         tag_options['data-ie_url'] = url_for({:controller => params_for[:controller], :action => 'mark_all', :eid => params[:eid]})
@@ -352,14 +357,15 @@ module ActiveScaffold
       
       def render_nested_view(action_links, url_options, record)
         rendered = []
+        link_nested_controllers = []
         action_links.member.each do |link|
           if link.nested_link? && link.column && @nested_auto_open[link.column.name] && @records.length <= @nested_auto_open[link.column.name] && controller.respond_to?(:render_component_into_view)
-            link_url_options = {:adapter => '_list_inline_adapter', :format => :js}.merge(action_link_url_options(link, url_options, record, options = {:reuse_eid => true})) 
-            link_id = get_action_link_id(link_url_options, record, link.column)
-            rendered << (controller.send(:render_component_into_view, link_url_options) + javascript_tag("ActiveScaffold.ActionLink.get('#{link_id}').set_opened();"))
+            link_url_options = {:embedded => true, :format => :js}.merge(action_link_url_options(link, url_options, record, options = {:reuse_eid => true}))
+            link_nested_controllers << link.controller.to_s if link.controller
+            rendered << (controller.send(:render_component_into_view, link_url_options))
           end 
         end
-        rendered.join(' ').html_safe
+        content_tag(:tr, content_tag(:td, rendered.join(' ').html_safe), :class => "inline-adapter-autoopen", 'data-actionlink-controllers' => link_nested_controllers.join('::').html_safe, 'data-as_load'=>"tr");
       end  
       
     end

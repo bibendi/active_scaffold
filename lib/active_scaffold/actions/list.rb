@@ -3,6 +3,7 @@ module ActiveScaffold::Actions
     def self.included(base)
       base.before_filter :list_authorized_filter, :only => [:index, :row]
       base.helper_method :list_columns
+      base.helper_method :save_current_page_num
     end
 
     def index
@@ -32,9 +33,7 @@ module ActiveScaffold::Actions
       end
     end
     def list_respond_to_js
-      if params[:adapter]
-        render(:partial => 'list_with_header')
-      elsif params[:embedded]
+      if params[:embedded]
         params.delete(:embedded)
         render(:partial => 'list_with_header')
       else
@@ -75,12 +74,8 @@ module ActiveScaffold::Actions
           })
       end
 
-      page = find_page(options);
-      if page.items.blank? && !page.pager.infinite?
-        page = page.pager.last
-        active_scaffold_config.list.user.page = page.number
-      end
-      @page, @records = page, page.items
+      @records = find_page(options);
+      @records
     end
 
     def each_record_in_page
@@ -162,11 +157,6 @@ module ActiveScaffold::Actions
     def action_update_respond_to_yaml
       render :text => successful? ? "" : Hash.from_xml(response_object.to_xml(:only => list_columns_names)).to_yaml, :content_type => Mime::YAML, :status => response_status
     end
-     
-    private
-    def list_authorized_filter
-      raise ActiveScaffold::ActionNotAllowed unless list_authorized?
-    end
 
     def list_formats
       (default_formats + active_scaffold_config.formats + active_scaffold_config.list.formats).uniq
@@ -179,6 +169,15 @@ module ActiveScaffold::Actions
 
     def action_confirmation_formats
       (default_formats + active_scaffold_config.formats).uniq
+    end
+
+    def save_current_page_num
+      active_scaffold_config.list.user.page = @records.current_page unless active_scaffold_config.list.pagination == false
+    end
+
+    private
+    def list_authorized_filter
+      raise ActiveScaffold::ActionNotAllowed unless list_authorized?
     end
 
     def list_columns

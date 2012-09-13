@@ -209,34 +209,51 @@ document.observe("dom:loaded", function() {
     }
     return true;
   });
-  document.on('ajax:before', 'a.as_paginate', function(event) {
+  document.on('ajax:before', 'div.active-scaffold-footer .pagination a', function(event) {
     var as_paginate = event.findElement();
-    var loading_indicator = as_paginate.up().down('img.loading-indicator');
+    var loading_indicator = as_paginate.up(1).down('img.loading-indicator');
     var history_controller_id = as_paginate.readAttribute('data-page-history');
     
     if (history_controller_id) addActiveScaffoldPageToHistory(as_paginate.readAttribute('href'), history_controller_id);
-    if (loading_indicator) loading_indicator.style.visibility = 'visible';
+    if (loading_indicator == null) {
+      var table_loading_indicator = as_paginate.up('div.active-scaffold').down('div.actions').down('img.loading-indicator');
+      loading_indicator = table_loading_indicator.cloneNode(true);
+      loading_indicator.id = null;
+      as_paginate.up(1).insert({top: loading_indicator});
+    }
+    loading_indicator.style.visibility = 'visible';
     return true;
   });
-  document.on('ajax:failure', 'a.as_paginate', function(event) {
+  document.on('ajax:failure', 'div.active-scaffold-footer .pagination a', function(event) {
     var as_scaffold = event.findElement('.active-scaffold');
     ActiveScaffold.report_500_response(as_scaffold);
     return true;
   });
-  document.on('ajax:complete', 'a.as_paginate', function(event) {
+  document.on('ajax:complete', 'div.active-scaffold-footer .pagination a', function(event) {
     var as_paginate = event.findElement();
     var loading_indicator = as_paginate.up().down('img.loading-indicator');
     
     if(loading_indicator) loading_indicator.style.visibility = 'hidden';  
     return true;
   });
-  document.on('ajax:before', 'input[type=button].as_add_existing', function(event) {
+  document.on('ajax:before', 'a.as_add_existing', function(event) {
     var button = event.findElement();
-    var url =  button.readAttribute('href').sub('--ID--', button.previous().getValue());
-    event.memo.url = url;
-    return true;
+    var selected_id = button.previous().getValue();
+    if (selected_id) {
+      var url =  button.readAttribute('href').sub('--ID--', selected_id);
+      event.memo.url = url;
+      return true;
+    } else {
+      return false;
+    }
   });
-  document.on('change', 'input.update_form, select.update_form', function(event) {
+  document.on('click', 'a.as_destroy_existing', function(event) {
+    var associated_record = event.findElement('tr.association-record');
+    ActiveScaffold.delete_subform_record(associated_record);
+    event.stop();
+    return false;
+  });
+  document.on('change', 'input.update_form, textarea.update_form, select.update_form', function(event) {
     var element = event.findElement();
     var as_form = element.up('form.as_form');
     var params = null;
@@ -314,7 +331,45 @@ document.observe("dom:loaded", function() {
       ActiveScaffold.focus_first_element_of_form(as_form);
       return true;
   });
+  document.on('as:form_element_loaded', 'li.horizontal-sub-form', function(event, element) {
+      element.select('a.as_associated_form_link').each(function(element) {
+        ActiveScaffold.show(element);
+        //Show select Box for add_existing as well
+        if(element.hasClassName('as_add_existing')) {
+          ActiveScaffold.show(element.previous());
+        }
+      });
+      return true;
+  });
+  document.on('as:list_row_loaded', 'tr.inline-adapter-autoopen', function(event, element) {
+    var actionlink_controllers = event.element().readAttribute('data-actionlink-controllers');
+    if(actionlink_controllers) {
+      actionlink_controllers = actionlink_controllers.split('::');
+      element.previous('tr').select('a.index').each(function(action_link) {
+        for (var i = 0; i < actionlink_controllers.length; i++) {
+          if (actionlink_controllers[i] === action_link.readAttribute('data-controller')) {
+            var as_action_link = ActiveScaffold.ActionLink.get(action_link);
+            if (as_action_link) {
+              as_action_link.set_opened();  
+            }
+          }
+        }
+      });
+    }
+    return true;
+  });
+  document.on('ajax:before', 'form.as_form', function(event) {
+    var as_form = event.findElement('form');
+    as_form.fire('as:form_submit');
+    return true;
+  });
+  document.on('submit', 'form.as_form[data-remote!="true"]', function(event) {
+    var as_form = event.findElement('form');
+    as_form.fire('as:form_submit');
+    return true;
+  });
   ActiveScaffold.trigger_load_events($$('[data-as_load]'));
+  ActiveScaffold.load_embedded_conrollers();
 });
 
 
@@ -396,18 +451,32 @@ var ActiveScaffold = {
     new_row.highlight();
   },
   
-  replace: function(element, html) {
-    element = $(element)
-    Element.replace(element, html);
-    element = $(element.readAttribute('id'));
+  replace: function(element, html, disable_event_trigger) {
+    element = $(element);
     var elements = element.select('[data-as_load]');
+    var new_element = null;
     elements.unshift(element);
-    ActiveScaffold.trigger_load_events(elements);
-    return element;
+    if((typeof(disable_event_trigger) != 'boolean') || disable_event_trigger === false) {
+      ActiveScaffold.trigger_unload_events(elements);
+    }
+    if (html.startsWith('<tr')) {
+        new_element = new Element('tbody').update(html);
+    } else {
+        new_element = new Element('div').update(html);
+    }
+    new_element = new_element.firstDescendant();
+    Element.replace(element, new_element);
+    elements = new_element.select('[data-as_load]');
+    elements.unshift(new_element);
+    if((typeof(disable_event_trigger) != 'boolean') || disable_event_trigger === false) {
+      ActiveScaffold.trigger_load_events(elements);
+    }
+    return new_element;
   },
     
   replace_html: function(element, html) {
     element = $(element);
+    ActiveScaffold.trigger_unload_events(element.select('[data-as_load]'));
     element.update(html);
     ActiveScaffold.trigger_load_events(element.select('[data-as_load]'));
     return element;
@@ -456,7 +525,7 @@ var ActiveScaffold = {
       tbody.insert({top: html});
       new_row = tbody.firstDescendant();
     } else if (options.insert_at == 'bottom') {
-      var last_row = tbody.childElements().reverse().detect(function(node) { return node.hasClassName('record') || node.hasClassName('inline-adapter')});
+      var last_row = tbody.childElements().reverse().detect(function(node) {return node.hasClassName('record') || node.hasClassName('inline-adapter')});
       if (last_row) {
         last_row.insert({after: html});
       } else {
@@ -495,7 +564,8 @@ var ActiveScaffold = {
     if (errors.hasClassName('association-record-errors')) {
       this.replace_html(errors, '');
     }
-    this.remove(record);
+    record.down('input.associated_action').value('delete');
+    this.hide(record);
   },
 
   report_500_response: function(active_scaffold_id) {
@@ -590,7 +660,9 @@ var ActiveScaffold = {
 
     if (element) {
       if (options.is_subform == false) {
-        this.replace(element.up('dl'), content);
+        ActiveScaffold.trigger_unload_events(new Array(element.up('li.form-element')));
+        element = this.replace(element.up('dl'), content);
+        ActiveScaffold.trigger_load_events(new Array(element.up('li.form-element')));
       } else {
         this.replace_html(element, content);
       }
@@ -615,7 +687,7 @@ var ActiveScaffold = {
     var mark_checkboxes = $$('#' + element.readAttribute('id') + ' > tr.record td.marked-column input[type="checkbox"]');
     mark_checkboxes.each(function(item) {
      if(options.checked === true) {
-       item.writeAttribute({ checked: 'checked' });
+       item.writeAttribute({checked: 'checked'});
      } else {
        item.removeAttribute('checked');
      }
@@ -624,7 +696,7 @@ var ActiveScaffold = {
     if(options.include_mark_all === true) {
       var mark_all_checkbox = element.previous('thead').down('th.marked-column_heading span input[type="checkbox"]');
       if(options.checked === true) {
-        mark_all_checkbox.writeAttribute({ checked: 'checked' }); 
+        mark_all_checkbox.writeAttribute({checked: 'checked'}); 
       } else {
         mark_all_checkbox.removeAttribute('checked');
       }
@@ -641,7 +713,33 @@ var ActiveScaffold = {
       case 'form':
        element.fire('as:form_loaded');
        break;
+      case 'form-element':
+       element.fire('as:form_element_loaded');
+       break;
       }
+    });
+  },
+
+  trigger_unload_events: function(elements){
+    elements.each(function(element) {
+      switch (element.readAttribute('data-as_load')) {
+      case 'tr':
+       element.fire('as:list_row_unloaded');
+       break;
+      case 'form':
+       element.fire('as:form_unloaded');
+       break;
+      case 'form-element':
+       element.fire('as:form_element_unloaded');
+       break;
+      }
+    });
+  },
+
+  load_embedded_conrollers: function(){
+    $$('a.as_link_to_component').each(function(element) {
+      var div_element = element.up('div.active-scaffold-component');
+      new Ajax.Updater(div_element, element.readAttribute('href').append_params({embedded: true}), {method: 'get', evalScripts: true});
     });
   }
 
@@ -733,9 +831,11 @@ ActiveScaffold.Actions.Abstract = Class.create({
     this.target = $(target);
     this.loading_indicator = $(loading_indicator);
     this.options = options;
+    var _this = this;
     this.links = links.collect(function(link) {
-      return this.instantiate_link(link);
-    }.bind(this));
+      var my_link = _this.instantiate_link(link);
+      return my_link;
+    });
   },
 
   instantiate_link: function(link) {
@@ -792,6 +892,7 @@ ActiveScaffold.ActionLink.Abstract = Class.create({
 
   close: function() {
     this.enable();
+    ActiveScaffold.trigger_unload_events(this.adapter.select('[data-as_load]'));
     this.adapter.remove();
     if (this.hide_target) this.target.show();
   },
@@ -837,6 +938,25 @@ ActiveScaffold.ActionLink.Abstract = Class.create({
     this.adapter = element;
     this.adapter.addClassName('as_adapter');
     this.adapter.store('action_link', this);
+  },
+
+  wrap_with_adapter_html: function(content, should_refresh_data) {
+    // players_view class missing
+    var id_string = null;
+    var close_label = this.scaffold().readAttribute('data-closelabel');
+    var controller = this.scaffold().readAttribute('data-controller');
+
+    if (this.tag.readAttribute('data-controller')) {
+        controller = this.tag.readAttribute('data-controller');
+    }
+
+    if(this.target.hasClassName('before-header')) {
+        id_string = this.target.readAttribute('id').replace('search', 'nested');
+    } else {
+        id_string = this.target.readAttribute('id').replace('list', 'nested');
+    }
+
+    return '<tr class="inline-adapter" id="' + id_string + '"><td colspan="99" class="inline-adapter-cell"><div class="' + this.action + '-view ' + controller +  '-view view"><a class="inline-adapter-close as_cancel" title="' + close_label + '" data-remote="true" data-refresh="' + should_refresh_data + '" href="">' + close_label +'</a>' + content + '</div></td></tr>'
   }
 });
 
@@ -847,10 +967,10 @@ ActiveScaffold.Actions.Record = Class.create(ActiveScaffold.Actions.Abstract, {
   instantiate_link: function(link) {
     var l = new ActiveScaffold.ActionLink.Record(link, this.target, this.loading_indicator);
     if (this.target.hasAttribute('data-refresh') && !this.target.readAttribute('data-refresh').blank()) l.refresh_url = this.target.readAttribute('data-refresh');
-    
-    if (l.position) {
-      l.url = l.url.append_params({adapter: '_list_inline_adapter'});
-      l.tag.href = l.url;
+
+    if (l.position && l.tag.hasAttribute('data-action') && l.tag.readAttribute('data-action') == "index") {
+        l.url = l.url.append_params({embedded: true});
+        l.tag.href = l.url;
     }
     l.set = this;
     return l;
@@ -862,12 +982,14 @@ ActiveScaffold.ActionLink.Record = Class.create(ActiveScaffold.ActionLink.Abstra
     this.set.links.each(function(item) {
       if (item.url != this.url && item.is_disabled() && item.adapter) {
         item.enable();
+        ActiveScaffold.trigger_unload_events(item.adapter.select('[data-as_load]'));
         item.adapter.remove();
       }
     }.bind(this));
   },
 
   insert: function(content) {
+    var should_refresh_data = (typeof(this.refresh_ur)== 'undefined');
     this.close_previous_adapter();
 
     if (this.position == 'replace') {
@@ -876,18 +998,19 @@ ActiveScaffold.ActionLink.Record = Class.create(ActiveScaffold.ActionLink.Abstra
     }
 
     if (this.position == 'after') {
-      this.target.insert({after:content});
+      this.target.insert({after:this.wrap_with_adapter_html(content, should_refresh_data)});
       ActiveScaffold.trigger_load_events(this.target.next().select('[data-as_load]'));
       this.set_adapter(this.target.next());
     }
     else if (this.position == 'before') {
-      this.target.insert({before:content});
+      this.target.insert({before:this.wrap_with_adapter_html(content, should_refresh_data)});
       ActiveScaffold.trigger_load_events(this.target.previous().select('[data-as_load]'));
       this.set_adapter(this.target.previous());
     }
     else {
       return false;
     }
+    this.update_flash_messages();
     this.adapter.down('td').down().highlight();
   },
 
@@ -913,11 +1036,14 @@ ActiveScaffold.ActionLink.Record = Class.create(ActiveScaffold.ActionLink.Abstra
   },
 
   set_opened: function() {
+    var should_refresh_data = (typeof(this.refresh_ur)== 'undefined');
     if (this.position == 'after') {
-      this.set_adapter(this.target.next());
+      var new_adapter = ActiveScaffold.replace(this.target.next(), this.wrap_with_adapter_html(this.target.next().childElements().first().innerHTML, should_refresh_data), true);
+      this.set_adapter(new_adapter);
     }
     else if (this.position == 'before') {
-      this.set_adapter(this.target.previous());
+      var new_adapter = ActiveScaffold.replace(this.target.previous(), this.wrap_with_adapter_html(this.target.previous().childElements().first().innerHTML, should_refresh_data), true);
+      this.set_adapter(new_adapter);
     }
     this.disable();
   }
@@ -929,10 +1055,7 @@ ActiveScaffold.ActionLink.Record = Class.create(ActiveScaffold.ActionLink.Abstra
 ActiveScaffold.Actions.Table = Class.create(ActiveScaffold.Actions.Abstract, {
   instantiate_link: function(link) {
     var l = new ActiveScaffold.ActionLink.Table(link, this.target, this.loading_indicator);
-    if (l.position) {
-      l.url = l.url.append_params({adapter: '_list_inline_adapter'});
-      l.tag.href = l.url;
-    }
+    
     return l;
   }
 });
@@ -940,13 +1063,14 @@ ActiveScaffold.Actions.Table = Class.create(ActiveScaffold.Actions.Abstract, {
 ActiveScaffold.ActionLink.Table = Class.create(ActiveScaffold.ActionLink.Abstract, {
   insert: function(content) {
     if (this.position == 'top') {
-      this.target.insert({top:content});
+      this.target.insert({top:this.wrap_with_adapter_html(content, false)});
       ActiveScaffold.trigger_load_events(this.target.immediateDescendants().first().select('[data-as_load]'));
       this.set_adapter(this.target.immediateDescendants().first());
     }
     else {
       throw 'Unknown position "' + this.position + '"'
     }
+    this.update_flash_messages();
     this.adapter.down('td').down().highlight();
   }
 });
