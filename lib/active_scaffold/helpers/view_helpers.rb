@@ -192,6 +192,7 @@ module ActiveScaffold
         html_options['data-position'] = link.position if link.position and link.inline?
         html_options[:class] += ' as_action' if link.inline?
         html_options['data-action'] = link.action if link.inline?
+        html_options['data-type'] = 'html xml' if link.inline?
         if link.popup?
           html_options['data-popup'] = true
           html_options[:target] = '_blank'
