@@ -5,7 +5,7 @@
 
 Gem::Specification.new do |s|
   s.name = %q{active_scaffold_vho}
-  s.version = "3.0.26"
+  s.version = "3.0.261"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Many, see README"]
@@ -208,8 +208,6 @@ Gem::Specification.new do |s|
     "lib/active_scaffold/helpers/search_column_helpers.rb",
     "lib/active_scaffold/helpers/show_column_helpers.rb",
     "lib/active_scaffold/helpers/view_helpers.rb",
-    "lib/active_scaffold/locale/de.rb",
-    "lib/active_scaffold/locale/en.rb",
     "lib/active_scaffold/locale/es.yml",
     "lib/active_scaffold/locale/fr.rb",
     "lib/active_scaffold/locale/hu.yml",
