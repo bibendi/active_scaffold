@@ -170,6 +170,7 @@ module ActiveScaffold
         html_options['data-controller'] = link.controller.to_s if link.controller
         html_options[:class] += ' as_action' if link.inline?
         html_options['data-action'] = link.action if link.inline?
+        html_options['data-type'] = 'html' if link.inline?
         if link.popup?
           html_options['data-popup'] = true
           html_options[:target] = '_blank'
